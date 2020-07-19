@@ -5,6 +5,8 @@ client = bigquery.Client()
 
 table_prefix = "bigquery-public-data.gnomAD.v2_1_1_exomes__chr"
 
+_GET_
+
 # Running the query on only chromosome 1 for now
 for chr_id in range(1, 2):
 
