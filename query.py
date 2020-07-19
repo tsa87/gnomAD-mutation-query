@@ -1,4 +1,5 @@
 from google.cloud import bigquery
+from hurry.filesize import size
 
 table_prefix = "bigquery-public-data.gnomAD.v2_1_1_exomes__chr"
 
@@ -24,10 +25,16 @@ class BigQueryCaller:
 
         self._num_retries = num_retries
 
+    def _est_query_cost(self, query):
+        job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
+        query_job = self._client.query(query, job_config=job_config)
+        
+        return query_job.total_bytes_processed
 
     # https://github.com/googlegenomics/gcp-variant-transforms/blob/master/gcp_variant_transforms/libs/partitioning.py
     def _run_query(self, query):
         query_job = self._client.query(query)
+
         num_retries = 0
         while True:
             try:
@@ -44,6 +51,10 @@ class BigQueryCaller:
         result = []
         for i in iterator:
             result.append(str(i.values()[0]))
+
+        total_bytes_billed = query_job.total_bytes_billed
+        print(total_bytes_billed)
+
         return result
 
 
@@ -51,9 +62,8 @@ caller = BigQueryCaller()
 table_name = table_prefix + "1"
 
 query = _GET_MAX_START_POSITION_QUERY.format(TABLE_NAME=table_name)
-max_start_position = caller._run_query(query)[0]
-
-print(max_start_position)
+print(size(caller._est_query_cost(query)))
+#max_start_position = caller._run_query(query)[0]
 
 start_position = 0
 
@@ -63,6 +73,4 @@ query = _GET_MUTATION_COUNT_QUERY.format(
     END_POSITION=start_position+100000
 )
 
-num_mutations = caller._run_query(query)[0]
-
-print(num_mutations)
+#num_mutations = caller._run_query(query)[0]
