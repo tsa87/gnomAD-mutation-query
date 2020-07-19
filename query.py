@@ -17,7 +17,6 @@ class BigQueryCaller:
 
     def __init__(self, client=None, num_retries=5):
 
-
         if client is None:
             self._client = bigquery.Client()
         else:
