@@ -1,45 +1,92 @@
 from google.cloud import bigquery
-import pickle
-
-client = bigquery.Client()
+from hurry.filesize import size
+import pandas as pd
 
 table_prefix = "bigquery-public-data.gnomAD.v2_1_1_exomes__chr"
 
-# Running the query on only chromosome 1 for now
-for chr_id in range(1, 2):
+_GET_MUTATION_COUNT_QUERY = (
+    'SELECT count(1) AS num_mutations '
+    'FROM {TABLE_NAME} AS T, T.alternate_bases AS ALT '
+    'WHERE start_position >= {START_POSITION} AND start_position < {END_POSITION} AND ALT.AF <=0.01')
 
-    table_name = table_prefix + str(chr_id)
+_GET_MAX_START_POSITION_QUERY = (
+    'SELECT MAX(start_position) '
+    'FROM {TABLE_NAME}'
+)
 
-    query = """
-        SELECT MIN(start_position), MAX(start_position)
-        FROM {0}
-    """.format(table_name)
+class BigQueryCaller:
+    """ Contains the BigQuery API Client and calling mechanism """
 
-    results = client.query(query)
+    def __init__(self, client=None, num_retries=5):
 
-    for row in results:
-        min_start_position, max_start_position = row.f0_, row.f1_
+        if client is None:
+            self._client = bigquery.Client()
+        else:
+            self._client = client
 
-
-    bin = []
-
-    for start_position in range(0, max_start_position, 100000):
-        query = """
-            SELECT count(1) AS num_mutations
-            FROM {0} AS T, T.alternate_bases AS ALT
-            WHERE start_position >= {1} AND start_position <= {2} AND ALT.AF <=0.01
-        """.format(table_name, start_position, start_position+100000)
-
-        results = client.query(query)
-
-        for row in results:
-            num_mutations = row.num_mutations
-
-        bin.append(num_mutations)
-
-    with open(table_name+"_mutations", 'wb') as fp:
-        pickle.dump(bin, fp)
+        self._num_retries = num_retries
 
 
+    def run_query(self, table_name, query_template, start_position, end_position, interval):
+        output = pd.DataFrame()
+        
+        for i in range(start_position, end_position-interval, interval):
+            query = query_template.format(
+                TABLE_NAME=table_name,
+                START_POSITION=i,
+                END_POSITION=i+interval
+            )
+            cost = self._get_query_cost(query)
+            result = int(self._get_query_result(query)[0])
+            
+            row = {
+                'start_position': i, 
+                'end_position': i+interval,
+                'mutation_count': result,
+                'bytes_processed': cost }
+    
+            output = output.append(row, ignore_index=True)
+            
+        columns = ['start_position', 'end_position', 'mutation_count', 'bytes_processed']
+        output = output.reindex(columns=columns)
+            
+        return output
+            
+        
+    def _get_query_cost(self, query):
+        job_config = bigquery.QueryJobConfig(dry_run=True, use_query_cache=False)
+        query_job = self._client.query(query, job_config=job_config)
+        
+        return query_job.total_bytes_processed
 
+
+    # https://github.com/googlegenomics/gcp-variant-transforms/blob/master/gcp_variant_transforms/libs/partitioning.py
+    def _get_query_result(self, query):
+        query_job = self._client.query(query)
+
+        num_retries = 0
+        while True:
+            try:
+                iterator = query_job.result(timeout=300)
+            except TimeoutError as e:
+                print('Time out waiting for query: %s', query)
+                if num_retries < self._num_retries:
+                    num_retries += 1
+                    time.sleep(90)
+                else:
+                    raise e
+            else:
+                break
+        result = []
+        for i in iterator:
+            result.append(str(i.values()[0]))
+
+        return result
+
+
+caller = BigQueryCaller()
+table_name = table_prefix + "1"
+
+df = caller.run_query(table_name, _GET_MUTATION_COUNT_QUERY, 0, 500000, 100000)
+df.to_csv("output.csv")
 
