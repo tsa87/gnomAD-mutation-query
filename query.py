@@ -7,6 +7,10 @@ _GET_MUTATION_COUNT_QUERY = (
     'FROM {TABLE_NAME} AS T, T.alternate_bases AS ALT'
     'WHERE start_position >= {START_POSITION} AND start_position <= {END_POSITION} AND ALT.AF <=0.01')
 
+_GET_MAX_START_POSITION_QUERY = (
+    'SELECT MAX(start_position)'
+    'FROM {TABLE_NAME}'
+)
 
 class BigQueryCaller:
     """ Contains the BigQuery API Client and calling mechanism """
@@ -47,37 +51,22 @@ class BigQueryCaller:
         return result
 
 
-# Running the query on only chromosome 1 for now
-for chr_id in range(1, 2):
+caller = BigQueryCaller()
+table_name = table_prefix + "1"
 
-    table_name = table_prefix + str(chr_id)
+query = _GET_MAX_START_POSITION_QUERY.format(TABLE_NAME=table_name)
+max_start_position = caller._run_query(query)[0]
 
-    query = """
-        SELECT MIN(start_position), MAX(start_position)
-        FROM {0}
-    """.format(table_name)
+print(max_start_position)
 
-    results = client.query(query)
+start_position = 0
 
-    for row in results:
-        min_start_position, max_start_position = row.f0_, row.f1_
+query = _GET_MUTATION_COUNT_QUERY.format(
+    TABLE_NAME=table_name,
+    START_POSITION=start_position,
+    END_POSITION=start_position+100000
+)
 
+num_mutations = caller._run_query(query)[0]
 
-    bin = []
-
-    for start_position in range(0, max_start_position, 100000):
-        query = _GET_MUTATION_COUNT_QUERY.format(
-            TABLE_NAME=table_name,
-            START_POSITION=start_position,
-            END_POSITION=start_position+100000
-        )
-
-        results = client.query(query)
-
-        for row in results:
-            num_mutations = row.num_mutations
-
-        bin.append(num_mutations)
-
-    with open(table_name+"_mutations", 'wb') as fp:
-        pickle.dump(bin, fp)
+print(num_mutations)
