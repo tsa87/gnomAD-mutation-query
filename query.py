@@ -30,22 +30,23 @@ class BigQueryCaller:
     def run_query(self, table_name, query_template, start_position, end_position, interval):
         output = pd.DataFrame()
         
-        for i in range(start_position, end_position-interval, interval):
+        for range_start in range(start_position, end_position-interval, interval):
+            range_end = range_start + interval
             query = query_template.format(
                 TABLE_NAME=table_name,
-                START_POSITION=i,
-                END_POSITION=i+interval
+                START_POSITION=range_start,
+                END_POSITION=range_end
             )
             cost = self._get_query_cost(query)
             result = int(self._get_query_result(query)[0])
             
-            row = {
-                'start_position': i, 
-                'end_position': i+interval,
+            range_result = {
+                'start_position': range_start, 
+                'end_position': range_end,
                 'mutation_count': result,
                 'bytes_processed': cost }
     
-            output = output.append(row, ignore_index=True)
+            output = output.append(range_result, ignore_index=True)
             
         columns = ['start_position', 'end_position', 'mutation_count', 'bytes_processed']
         output = output.reindex(columns=columns)
