@@ -19,7 +19,7 @@ x_pos = [i for i in range(len(arr))]
 plt.figure(dpi=1200)
 plt.bar(x_pos, arr)
 plt.xlabel("Start Position (100k) ")
-plt.ylabel("# of Mutations with Frequency > 0.01")
+plt.ylabel("# of Mutations with Frequency <= 0.01")
 plt.title("Rare mutations count from Chr1 Exomes with 100k bin size")
 
 plt.savefig("exomes__chr1_mutations.pdf")
