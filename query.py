@@ -27,7 +27,36 @@ class BigQueryCaller:
         self._num_retries = num_retries
 
 
-    def run_query(self, table_name, query_template, start_position, end_position, interval):
+    def run_queries(self, table_names, query_template, interval):
+        results = {}
+        
+        for table_name in table_names:
+            
+            start_position = 0
+            end_position = self._run_single_result_query(table_name, _GET_MAX_START_POSITION_QUERY)
+            
+            result = self._run_partitioned_query(
+                table_name,
+                _GET_MUTATION_COUNT_QUERY,
+                start_position,
+                end_position,
+                interval)
+            
+            results[table_name] = result
+            
+        
+        
+    def _run_single_result_query(self, table_name, query_template):
+        query = query_template.format(
+            TABLE_NAME=table_name
+        )
+        result = int(self._get_query_result(query)[0])
+        
+        return result
+        
+
+    # Returns a pandas data frame for queries that partitions a table.
+    def _run_partitioned_query(self, table_name, query_template, start_position, end_position, interval):
         output = pd.DataFrame()
         
         for range_start in range(start_position, end_position-interval, interval):
@@ -43,12 +72,12 @@ class BigQueryCaller:
             range_result = {
                 'start_position': range_start, 
                 'end_position': range_end,
-                'mutation_count': result,
+                'measure': result,
                 'bytes_processed': cost }
     
             output = output.append(range_result, ignore_index=True)
             
-        columns = ['start_position', 'end_position', 'mutation_count', 'bytes_processed']
+        columns = ['start_position', 'end_position', 'measure', 'bytes_processed']
         output = output.reindex(columns=columns)
             
         return output
