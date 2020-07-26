@@ -64,7 +64,6 @@ class BigQueryCaller:
         output = pd.DataFrame()
         
         for range_start in range(start_position, end_position-interval+1, interval):
-            
             range_end = range_start + interval
             
             query = query_template.format(
@@ -78,7 +77,6 @@ class BigQueryCaller:
             
             if verbose:
                 print(str(range_start) + "~" + str(range_end) + ": " + str(result) + " " + size(cost))
-                
             
             range_result = {
                 'start_position': range_start, 

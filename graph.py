@@ -50,4 +50,3 @@ if __name__ == "__main__":
             "Count of Mutations with Frequency <= 1%",
             "rare_mutations_count_" + ".".join(path.split(".")[:-1]) + ".pdf"
         )
-    
