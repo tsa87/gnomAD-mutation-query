@@ -2,6 +2,8 @@ from google.cloud import bigquery
 from hurry.filesize import size
 import pandas as pd
 
+table_prefix = "bigquery-public-data.gnomAD.v2_1_1_exomes__chr"
+
 _GET_MUTATION_COUNT_QUERY = (
     'SELECT count(1) AS num_mutations '
     'FROM {TABLE_NAME} AS T, T.alternate_bases AS ALT '
@@ -25,68 +27,28 @@ class BigQueryCaller:
         self._num_retries = num_retries
 
 
-    def run_queries(self, table_names, query_template, start_position=0, interval=100000, verbose=False):
-        results = {}
-        
-        for table_name in table_names:
-            
-            end_position = self._run_single_result_query(table_name, _GET_MAX_START_POSITION_QUERY)
-            
-            if verbose:
-                print("Starting processing " + table_name)
-                print("Table max start position: " + str(end_position))
-            
-            result = self._run_partitioned_query(
-                table_name,
-                query_template,
-                start_position,
-                end_position,
-                interval,
-                verbose=verbose)
-            
-            self.df_to_csv(result, table_name + ".csv")
-            results[table_name] = result
-        
-        return results
-            
-        
-    def _run_single_result_query(self, table_name, query_template):
-        query = query_template.format(
-            TABLE_NAME=table_name
-        )
-        result = int(self._get_query_result(query)[0])
-        
-        return result
-        
-
-    # Returns a pandas data frame for queries that partitions a table.
-    def _run_partitioned_query(self, table_name, query_template, start_position, end_position, interval, verbose=False):
+    def run_query(self, table_name, query_template, start_position, end_position, interval):
         output = pd.DataFrame()
         
-        for range_start in range(start_position, end_position-interval+1, interval):
+        for range_start in range(start_position, end_position-interval, interval):
             range_end = range_start + interval
-            
             query = query_template.format(
                 TABLE_NAME=table_name,
                 START_POSITION=range_start,
                 END_POSITION=range_end
             )
-            
             cost = self._get_query_cost(query)
             result = int(self._get_query_result(query)[0])
-            
-            if verbose:
-                print(str(range_start) + "~" + str(range_end) + ": " + str(result) + " " + size(cost))
             
             range_result = {
                 'start_position': range_start, 
                 'end_position': range_end,
-                'measure': result,
+                'mutation_count': result,
                 'bytes_processed': cost }
     
             output = output.append(range_result, ignore_index=True)
             
-        columns = ['start_position', 'end_position', 'measure', 'bytes_processed']
+        columns = ['start_position', 'end_position', 'mutation_count', 'bytes_processed']
         output = output.reindex(columns=columns)
             
         return output
@@ -122,17 +84,10 @@ class BigQueryCaller:
 
         return result
 
-    
-    def df_to_csv(self, dataframe, name):
-        dataframe.to_csv(name)
 
+caller = BigQueryCaller()
+table_name = table_prefix + "1"
 
-if __name__ == "__main__":
-    caller = BigQueryCaller()
-    
-    table_prefix = "bigquery-public-data.gnomAD.v3_genomes__chr"
-    table_postfixes = ["X", "Y", "1", "20", "17"]
-    table_names = [table_prefix + table_postfix for table_postfix in table_postfixes]
-    
-    caller.run_queries(table_names, _GET_MUTATION_COUNT_QUERY, verbose=True)
+df = caller.run_query(table_name, _GET_MUTATION_COUNT_QUERY, 0, 500000, 100000)
+df.to_csv("output.csv")
 
